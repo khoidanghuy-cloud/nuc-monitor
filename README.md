@@ -1,4 +1,4 @@
-# nuc-monitor
+# nuc-monitor for linux
 CPU temperature/ fan speed, ram status and hardisk status.
 
 # Installation Guide:
