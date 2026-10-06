@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NUC Monitor & Torrent Manager</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <style>
+    body { background-color: #0b1120; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    
+    /* Sidebar Cấu hình mặc định cho Laptop/Desktop (Mở rộng) */
+    .sidebar { width: 220px; position: fixed; top: 0; bottom: 0; left: 0; background-color: #111827; padding-top: 20px; z-index: 1000; border-right: 1px solid #1f2937; transition: all 0.3s ease; }
+    .sidebar .logo-text { color: #38bdf8; font-weight: bold; font-size: 1.2rem; margin-bottom: 30px; }
+    .nav-link { color: #94a3b8; margin: 4px 12px; border-radius: 6px; font-weight: 500; cursor: pointer; padding: 10px 15px; display: flex; align-items: center; white-space: nowrap; }
+    .nav-link:hover { color: #f1f5f9; background-color: #1e293b; }
+    .nav-link.active { background-color: #2563eb; color: #ffffff; }
+    
+    /* Main Content mặc định trên Laptop */
+    .main-content { margin-left: 220px; padding: 25px 35px; transition: all 0.3s ease; }
+    
+    /* RÚT GỌN SIDEBAR CHO THIẾT BỊ DI ĐỘNG (MOBILE - Màn hình dưới 768px) */
+    @media (max-width: 768px) {
+      .sidebar { width: 65px; }
+      .sidebar .logo-text span, .sidebar .link-text { display: none; } /* Ẩn chữ, chỉ giữ lại Icon */
+      .sidebar .logo-text { margin-bottom: 20px; text-align: center; }
+      .nav-link { justify-content: center; padding: 12px 0; margin: 4px 6px; }
+      .nav-link i { font-size: 1.2rem; margin-right: 0 !important; }
+      .main-content { margin-left: 65px; padding: 15px; } /* Thu nhỏ lề để tối ưu không gian mobile */
+    }
+
+    .card-custom { background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; margin-bottom: 25px; }
+    .badge-temp { background-color: #0284c7; color: white; padding: 6px 14px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; }
+    
+    /* Bảng Torrent */
+    .table-container { background: #1e293b; border-radius: 8px; overflow: hidden; }
+    .table { margin-bottom: 0; color: #e2e8f0; }
+    .table thead th { background-color: #ffffff; color: #0f172a; font-weight: bold; padding: 12px 16px; border: none; }
+    .table tbody td { padding: 12px 16px; border-bottom: 1px solid #334155; vertical-align: middle; }
+    
+    .custom-input-group .form-control { background-color: #0f172a; border: 1px solid #334155; color: white; padding: 12px; }
+    .custom-input-group .btn { background-color: #2563eb; border: none; padding: 0 25px; font-weight: 500; }
+    
+    /* Thanh RAM Custom */
+    .ram-row { display: flex; align-items: center; margin-bottom: 12px; }
+    .ram-label { width: 140px; font-weight: 600; font-size: 0.9rem; }
+    .ram-bar-bg { flex-grow: 1; background-color: #0f172a; height: 28px; border-radius: 6px; overflow: hidden; position: relative; }
+    .ram-bar-fill { height: 100%; transition: width 0.5s ease; }
+    
+    /* Card Ổ cứng */
+    .disk-card { background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 15px; }
+
+    /* Tab Quản trị */
+    .form-dark, .form-dark:focus { background-color: #0f172a; border: 1px solid #334155; color: #e2e8f0; }
+    .form-dark:focus { border-color: #2563eb; box-shadow: none; }
+    .form-dark::placeholder { color: #64748b; }
+    .manage-actions .btn { padding: 2px 8px; }
+  </style>
+</head>
+<body>
+
+  <!-- Menu Sidebar bên trái -->
+  <div class="sidebar">
+    <div class="px-2 text-center logo-text">
+      <i class="bi bi-cpu"></i> <span>NUC7</span>
+    </div>
+    <ul class="nav nav-pills flex-column">
+      <li class="nav-item">
+        <a class="nav-link active" id="btn-hardware" onclick="switchTab('hardware')" title="Hardware">
+          <i class="bi bi-speedometer2 me-2"></i> <span class="link-text">Hardware</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" id="btn-torrent" onclick="switchTab('torrent')" title="Torrent">
+          <i class="bi bi-download me-2"></i> <span class="link-text">Torrent</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" id="btn-services" onclick="switchTab('services')" title="Services">
+          <i class="bi bi-gear-wide-connected me-2"></i> <span class="link-text">Services</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" id="btn-manage" onclick="switchTab('manage')" title="Manage">
+          <i class="bi bi-shield-lock me-2"></i> <span class="link-text">Manage</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <!-- Nội dung chính -->
+  <div class="main-content">
+    
+    <!-- ============================================== -->
+    <!-- TAB 1: HARDWARE MONITOR                        -->
+    <!-- ============================================== -->
+    <div id="tab-hardware">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0 fw-bold text-info"><i class="bi bi-pc-display me-2"></i> NUC7 - Giám sát Hệ thống</h4>
+        <div>
+          <span class="badge-temp"><i class="bi bi-thermometer-half"></i> <span id="val-temp">--</span>°C</span>
+        </div>
+      </div>
+
+      <!-- Biểu đồ Nhiệt độ CPU & % CPU -->
+      <div class="card-custom">
+        <h6 class="fw-bold mb-3"><i class="bi bi-graph-up me-2"></i> Nhiệt độ CPU & Sử dụng CPU (%)</h6>
+        <div style="height: 280px; position: relative;">
+          <canvas id="chartCpu"></canvas>
+        </div>
+      </div>
+
+      <!-- Khung hiển thị Card đồ họa (GPU) -->
+      <div class="card-custom">
+        <h6 class="fw-bold mb-3"><i class="bi bi-gpu-card me-2" style="color: #38bdf8;"></i> Mức sử dụng Card đồ họa (GPU)</h6>
+        <div class="d-flex align-items-center">
+          <div class="flex-grow-1 me-3">
+            <div class="progress bg-dark" style="height: 20px;">
+              <div id="gpu-bar" class="progress-bar bg-info progress-bar-striped progress-bar-animated" style="width: 0%;">0%</div>
+            </div>
+          </div>
+          <span class="fw-bold fs-5 text-info" id="gpu-val">0%</span>
+        </div>
+      </div>
+
+      <!-- Dung lượng RAM -->
+      <div class="card-custom">
+        <h6 class="fw-bold mb-3"><i class="bi bi-cpu-fill me-2" style="color: #ec4899;"></i> Dung lượng RAM (GB)</h6>
+        
+        <div class="ram-row">
+          <div class="ram-label">Đang dùng (<span id="ram-used-val">0</span>GB)</div>
+          <div class="ram-bar-bg">
+            <div id="ram-used-bar" class="ram-bar-fill" style="width: 0%; background-color: #f43f5e;"></div>
+          </div>
+        </div>
+
+        <div class="ram-row">
+          <div class="ram-label">Cache (<span id="ram-cache-val">0</span>GB)</div>
+          <div class="ram-bar-bg">
+            <div id="ram-cache-bar" class="ram-bar-fill" style="width: 0%; background-color: #eab308;"></div>
+          </div>
+        </div>
+
+        <div class="ram-row">
+          <div class="ram-label">Trống (<span id="ram-free-val">0</span>GB)</div>
+          <div class="ram-bar-bg">
+            <div id="ram-free-bar" class="ram-bar-fill" style="width: 0%; background-color: #10b981;"></div>
+          </div>
+        </div>
+
+        <div class="text-center text-muted small mt-2">
+          GB (Tổng: <span id="ram-total-val">0</span> GB)
+        </div>
+      </div>
+
+      <!-- Danh sách Ổ cứng -->
+      <div class="card-custom">
+        <h6 class="fw-bold mb-3"><i class="bi bi-hdd-fill me-2" style="color: #a855f7;"></i> Ổ cứng (Disks)</h6>
+        <div class="row" id="disk-list">
+          <div class="col-12 text-muted">Đang tải danh sách ổ đĩa...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- TAB 2: QUẢN LÝ TORRENT                         -->
+    <!-- ============================================== -->
+    <div id="tab-torrent" style="display: none;">
+      <h4 class="mb-4 fw-bold"><i class="bi bi-cloud-arrow-down me-2"></i> Quản lý Download Aria2c</h4>
+
+      <div class="card-custom">
+        <div class="d-flex align-items-center mb-1">
+          <i class="bi bi-plus-circle me-2"></i> 
+          <h6 class="mb-0">Thêm Torrent / Magnet / Link tải</h6>
+        </div>
+	<!-- NÚT DỊCH PHỤ ĐỀ -->
+	<button class="btn btn-sm btn-outline-info" onclick="triggerTranslate()">
+	  <i class="bi bi-translate me-1"></i> Dịch phụ đề
+	</button>
+        <div class="text-danger text-center mb-3 small">/mnt/phim/_MOVIES</div>
+        <div class="input-group custom-input-group">
+          <input type="text" id="torrent-url" class="form-control" placeholder="Nhập Magnet link hoặc URL vào đây...">
+          <button class="btn btn-primary" onclick="submitTorrent()"><i class="bi bi-download me-1"></i> Tải về</button>
+        </div>
+      </div>
+
+      <div class="card table-container">
+        <div class="p-3 border-bottom border-secondary">
+          <h6 class="mb-0"><i class="bi bi-list-task me-2"></i> Tiến trình Tải về</h6>
+        </div>
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Tên phim / Tệp</th>
+                <th>Dung lượng</th>
+                <th>Tiến độ</th>
+                <th>Tốc độ</th>
+                <th>Trạng thái</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="torrent-list">
+              <tr><td colspan="6" class="text-center text-muted">Đang tải dữ liệu...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+	<!-- TAB 3: DANH SÁCH SERVICES -->
+	<div id="tab-services" style="display: none;">
+	  <div class="d-flex justify-content-between align-items-center mb-4">
+	    <h4 class="mb-0 fw-bold text-info"><i class="bi bi-cpu-fill me-2"></i> Tiến trình & Dịch vụ đang chạy</h4>
+	    <!-- Thêm dòng tổng CPU và RAM ở đây -->
+	    <div>
+	      <span class="badge bg-primary fs-6 me-2">Tổng CPU: <span id="services-total-cpu">--</span>%</span>
+	      <span class="badge bg-info text-dark fs-6">Tổng RAM: <span id="services-total-ram">--</span>%</span>
+	    </div>
+	  </div>
+
+	  <div class="card table-container">
+	    <div class="table-responsive">
+	      <table class="table">
+		<thead>
+		  <tr>
+		    <th>PID</th>
+		    <th>Tên Tiến trình / Service</th>
+		    <th>Sử dụng CPU (%)</th>
+		    <th>Sử dụng RAM (%)</th>
+		  </tr>
+		</thead>
+		<tbody id="services-list">
+		  <tr><td colspan="4" class="text-center text-muted">Đang tải dữ liệu...</td></tr>
+		</tbody>
+	      </table>
+	    </div>
+	  </div>
+	</div>
+
+    <!-- ============================================== -->
+    <!-- TAB 4: QUẢN TRỊ (YÊU CẦU ĐĂNG NHẬP SSH)        -->
+    <!-- ============================================== -->
+    <div id="tab-manage" style="display: none;">
+
+      <!-- Form đăng nhập -->
+      <div id="manage-login" style="display: none;">
+        <div class="card-custom mx-auto mt-4" style="max-width: 400px;">
+          <h5 class="fw-bold mb-1"><i class="bi bi-shield-lock me-2 text-info"></i> Đăng nhập quản trị</h5>
+          <p class="small text-muted mb-3">Dùng tài khoản SSH của máy NUC</p>
+          <form onsubmit="manageLogin(event)">
+            <input type="text" id="manage-username" class="form-control form-dark mb-2" placeholder="Tài khoản" autocomplete="username" required>
+            <input type="password" id="manage-password" class="form-control form-dark mb-3" placeholder="Mật khẩu" autocomplete="current-password" required>
+            <div id="manage-login-error" class="text-danger small mb-2"></div>
+            <button type="submit" id="manage-login-btn" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right me-1"></i> Đăng nhập</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Bảng điều khiển sau khi đăng nhập -->
+      <div id="manage-panel" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+          <h4 class="mb-0 fw-bold text-info"><i class="bi bi-shield-check me-2"></i> Quản trị hệ thống</h4>
+          <div>
+            <span class="badge bg-secondary fs-6 me-2"><i class="bi bi-person-fill me-1"></i><span id="manage-user"></span></span>
+            <button class="btn btn-sm btn-outline-light" onclick="manageLogout()"><i class="bi bi-box-arrow-right me-1"></i> Đăng xuất</button>
+          </div>
+        </div>
+
+        <!-- Nguồn điện -->
+        <div class="card-custom">
+          <h6 class="fw-bold mb-3"><i class="bi bi-power me-2 text-danger"></i> Nguồn điện</h6>
+          <button class="btn btn-warning me-2" onclick="powerAction('reboot')"><i class="bi bi-arrow-clockwise me-1"></i> Khởi động lại</button>
+          <button class="btn btn-danger" onclick="powerAction('shutdown')"><i class="bi bi-power me-1"></i> Tắt máy</button>
+        </div>
+
+        <!-- Danh sách service -->
+        <div class="card table-container">
+          <div class="p-3 border-bottom border-secondary d-flex flex-wrap gap-2 align-items-center">
+            <h6 class="mb-0 me-auto"><i class="bi bi-hdd-stack me-2"></i> Services đã cài đặt <small class="text-muted" id="manage-count"></small></h6>
+            <input type="search" id="manage-search" class="form-control form-control-sm form-dark" style="max-width: 220px;" placeholder="Tìm service..." oninput="renderManageServices()">
+            <select id="manage-filter" class="form-select form-select-sm form-dark" style="max-width: 130px;" onchange="renderManageServices()">
+              <option value="all">Tất cả</option>
+              <option value="systemd">Systemd</option>
+              <option value="docker">Docker</option>
+            </select>
+            <button class="btn btn-sm btn-outline-info" onclick="fetchManageServices()" title="Làm mới"><i class="bi bi-arrow-repeat"></i></button>
+          </div>
+          <div id="manage-docker-error" class="px-3 pt-2 small text-warning"></div>
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Tên</th>
+                  <th>Loại</th>
+                  <th>Trạng thái</th>
+                  <th>Mô tả</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="manage-list">
+                <tr><td colspan="5" class="text-center text-muted">Đang tải dữ liệu...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let cpuChart = null;
+    const maxDataPoints = 30;
+    const chartLabels = [];
+    const tempData = [];
+    const cpuUsageData = [];
+
+    function initChart() {
+      const ctx = document.getElementById('chartCpu').getContext('2d');
+      cpuChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {
+              label: 'Nhiệt độ CPU (°C)',
+              data: tempData,
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              borderWidth: 2,
+              pointRadius: 2,
+              tension: 0.3,
+              yAxisID: 'y'
+            },
+            {
+              label: '% CPU Sử dụng',
+              data: cpuUsageData,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              borderWidth: 2,
+              pointRadius: 2,
+              tension: 0.3,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              grid: { color: '#1e293b' },
+              ticks: { color: '#64748b', maxRotation: 45, minRotation: 45 }
+            },
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              title: { display: true, text: '°C', color: '#38bdf8' },
+              grid: { color: '#1e293b' },
+              ticks: { color: '#38bdf8' }
+            },
+            y1: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              title: { display: true, text: '% CPU', color: '#10b981' },
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#10b981' },
+              min: 0,
+              max: 100
+            }
+          },
+          plugins: {
+            legend: { labels: { color: '#94a3b8' } }
+          }
+        }
+      });
+    }
+
+    function switchTab(tab) {
+      ['hardware', 'torrent', 'services', 'manage'].forEach(t => {
+        document.getElementById('tab-' + t).style.display = (tab === t) ? 'block' : 'none';
+        document.getElementById('btn-' + t).classList.toggle('active', tab === t);
+      });
+
+      if (tab === 'torrent') fetchTorrents();
+      if (tab === 'hardware') fetchHardware();
+      if (tab === 'manage') loadManage();
+    }
+
+    function fetchHardware() {
+      fetch('/api/hardware')
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('val-temp').innerText = data.cpu_temp;
+
+	  // --- CẬP NHẬT GPU ---
+          const gpu = data.gpu_percent || 0;
+          document.getElementById('gpu-val').innerText = gpu + '%';
+          document.getElementById('gpu-bar').style.width = gpu + '%';
+          document.getElementById('gpu-bar').innerText = gpu + '%';
+          // ----------------------------------------
+
+          const now = new Date().toLocaleTimeString();
+          if (chartLabels.length >= maxDataPoints) {
+            chartLabels.shift();
+            tempData.shift();
+            cpuUsageData.shift();
+          }
+          chartLabels.push(now);
+          tempData.push(data.cpu_temp);
+          cpuUsageData.push(data.cpu_percent);
+          if (cpuChart) cpuChart.update();
+
+          document.getElementById('ram-used-val').innerText = data.ram_used;
+          document.getElementById('ram-cache-val').innerText = data.ram_cache;
+          document.getElementById('ram-free-val').innerText = data.ram_free;
+          document.getElementById('ram-total-val').innerText = data.ram_total;
+
+          const total = data.ram_total || 1;
+          document.getElementById('ram-used-bar').style.width = ((data.ram_used / total) * 100) + '%';
+          document.getElementById('ram-cache-bar').style.width = ((data.ram_cache / total) * 100) + '%';
+          document.getElementById('ram-free-bar').style.width = ((data.ram_free / total) * 100) + '%';
+
+          const diskList = document.getElementById('disk-list');
+          diskList.innerHTML = '';
+          (data.disks || []).forEach(disk => {
+            diskList.innerHTML += `
+              <div class="col-md-4 mb-3">
+                <div class="disk-card">
+                  <div class="fw-bold mb-1 text-truncate"><i class="bi bi-folder-fill me-2 text-warning"></i>${disk.mount}</div>
+                  <div class="small text-muted mb-2">Đã dùng: <b class="text-white">${disk.used}G</b> / Tổng: <b class="text-white">${disk.total}G</b> (${disk.percent}%)</div>
+                  <div class="progress bg-dark" style="height: 6px;">
+                    <div class="progress-bar bg-info" style="width: ${disk.percent}%"></div>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+        });
+    }
+
+    function fetchTorrents() {
+      fetch('/api/torrent/list')
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.getElementById('torrent-list');
+          tbody.innerHTML = '';
+          const items = [...(data.active || []), ...(data.waiting || []), ...(data.stopped || [])];
+
+          if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Không có tệp nào đang tải</td></tr>';
+            return;
+          }
+
+          items.forEach(item => {
+            let name = "Đang lấy metadata...";
+            if (item.bittorrent && item.bittorrent.info) name = item.bittorrent.info.name;
+            else if (item.files && item.files[0]) name = item.files[0].path.split('/').pop() || item.files[0].uris[0]?.uri || name;
+
+            const total = parseInt(item.totalLength) || 0;
+            const completed = parseInt(item.completedLength) || 0;
+            const progress = total > 0 ? ((completed / total) * 100).toFixed(1) : 0;
+            const speed = (parseInt(item.downloadSpeed) / 1024).toFixed(1) + " KB/s";
+            const sizeMB = (total / (1024 * 1024)).toFixed(1) + " MB";
+
+            let status = `<span class="badge bg-secondary">${item.status}</span>`;
+            if (item.status === 'active') status = `<span class="badge text-info">Đang tải</span>`;
+            if (item.status === 'paused') status = `<span class="badge text-warning">Tạm dừng</span>`;
+            if (item.status === 'complete') status = `<span class="badge text-success">Hoàn thành</span>`;
+
+            tbody.innerHTML += `
+              <tr>
+                <td class="text-truncate" style="max-width: 200px;">${name}</td>
+                <td>${sizeMB}</td>
+                <td>
+                  <div class="progress bg-dark" style="height: 8px;">
+                    <div class="progress-bar bg-primary" style="width: ${progress}%"></div>
+                  </div>
+                  <small class="text-muted">${progress}%</small>
+                </td>
+                <td>${speed}</td>
+                <td>${status}</td>
+                <td>
+                  ${item.status === 'active' ? `<button class="btn btn-sm btn-outline-warning border-0" onclick="control('${item.gid}', 'pause')"><i class="bi bi-pause-fill"></i></button>` : ''}
+                  ${item.status === 'paused' ? `<button class="btn btn-sm btn-outline-success border-0" onclick="control('${item.gid}', 'unpause')"><i class="bi bi-play-fill"></i></button>` : ''}
+                  <button class="btn btn-sm btn-outline-danger border-0" onclick="control('${item.gid}', 'remove')"><i class="bi bi-trash3"></i></button>
+                </td>
+              </tr>
+            `;
+          });
+        });
+    }
+
+    function submitTorrent() {
+      const input = document.getElementById('torrent-url');
+      const uri = input.value.trim();
+      if (!uri) return;
+
+      fetch('/api/torrent/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uri: uri })
+      })
+      .then(res => res.json())
+      .then(res => {
+        if (res.success) {
+          input.value = '';
+          fetchTorrents();
+        } else alert("Lỗi: " + res.message);
+      });
+    }
+
+	function triggerTranslate() {
+	  if (!confirm("Bạn có chắc chắn muốn chạy script dịch phụ đề không?")) return;
+	  fetch('/api/torrent/translate', {
+	    method: 'POST',
+	    headers: { 'Content-Type': 'application/json' }
+	  })
+	  .then(res => res.json())
+	  .then(res => {
+	    if (res.success) {
+	      alert(res.message);
+	    } else {
+	      alert("Lỗi khi chạy lệnh: " + res.message);
+	    }
+	  })
+	  .catch(err => {
+	    alert("Lỗi kết nối máy chủ: " + err);
+	  });
+	}
+
+	function fetchServices() {
+	  fetch('/api/services')
+	    .then(res => res.json())
+	    .then(data => {
+	      // 1. Cập nhật Tổng CPU và RAM lên giao diện
+	      document.getElementById('services-total-cpu').innerText = data.total_cpu || 0;
+	      document.getElementById('services-total-ram').innerText = data.total_ram || 0;
+
+	      // 2. Cập nhật bảng danh sách tiến trình
+	      const tbody = document.getElementById('services-list');
+	      tbody.innerHTML = '';
+	      
+	      const processes = data.processes || [];
+	      if (processes.length === 0) {
+		tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Không có tiến trình chiếm tài nguyên</td></tr>';
+		return;
+	      }
+	      
+	      processes.forEach(item => {
+		tbody.innerHTML += `
+		  <tr>
+		    <td><code>${item.pid}</code></td>
+		    <td class="fw-bold text-warning">${item.name}</td>
+		    <td><span class="badge ${item.cpu > 50 ? 'bg-danger' : 'bg-primary'}">${item.cpu}%</span></td>
+		    <td><span class="badge bg-info text-dark">${item.ram}%</span></td>
+		  </tr>
+		`;
+	      });
+	    });
+	}
+
+    function control(gid, action) {
+      fetch('/api/torrent/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gid: gid, action: action })
+      }).then(() => fetchTorrents());
+    }
+
+    // ==========================================
+    // TAB QUẢN TRỊ
+    // ==========================================
+    let manageServices = [];
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // Gọi API quản trị, tự chuyển về form đăng nhập khi phiên hết hạn
+    function manageApi(url, body) {
+      const options = body === undefined ? {} : {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      };
+      return fetch(url, options).then(async res => {
+        const data = await res.json().catch(() => ({ success: false, message: 'Phản hồi không hợp lệ từ máy chủ' }));
+        if (res.status === 401 && data.auth === false) {
+          showManageLogin('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
+          throw new Error('unauthorized');
+        }
+        return data;
+      });
+    }
+
+    function loadManage() {
+      fetch('/api/manage/status')
+        .then(res => res.json())
+        .then(data => data.auth ? showManagePanel(data.user) : showManageLogin(''));
+    }
+
+    function showManageLogin(message) {
+      document.getElementById('manage-panel').style.display = 'none';
+      document.getElementById('manage-login').style.display = 'block';
+      document.getElementById('manage-login-error').innerText = message || '';
+      document.getElementById('manage-username').focus();
+    }
+
+    function showManagePanel(user) {
+      document.getElementById('manage-login').style.display = 'none';
+      document.getElementById('manage-panel').style.display = 'block';
+      document.getElementById('manage-user').innerText = user;
+      fetchManageServices();
+    }
+
+    function manageLogin(event) {
+      event.preventDefault();
+      const btn = document.getElementById('manage-login-btn');
+      const passwordInput = document.getElementById('manage-password');
+      btn.disabled = true;
+      fetch('/api/manage/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: document.getElementById('manage-username').value, password: passwordInput.value })
+      })
+      .then(res => res.json())
+      .then(res => {
+        if (res.success) {
+          passwordInput.value = '';
+          showManagePanel(res.user);
+        } else {
+          document.getElementById('manage-login-error').innerText = res.message;
+        }
+      })
+      .catch(err => document.getElementById('manage-login-error').innerText = 'Lỗi kết nối máy chủ: ' + err)
+      .finally(() => btn.disabled = false);
+    }
+
+    function manageLogout() {
+      fetch('/api/manage/logout', { method: 'POST' }).then(() => {
+        manageServices = [];
+        showManageLogin('');
+      });
+    }
+
+    function powerAction(action) {
+      const msg = action === 'reboot'
+        ? 'Bạn có chắc chắn muốn KHỞI ĐỘNG LẠI máy NUC không?'
+        : 'Bạn có chắc chắn muốn TẮT máy NUC không?\nSau khi tắt sẽ không thể bật lại từ xa qua trang này.';
+      if (!confirm(msg)) return;
+      manageApi('/api/manage/power', { action: action })
+        .then(res => alert(res.success ? res.message : 'Lỗi: ' + res.message))
+        .catch(() => {});
+    }
+
+    function fetchManageServices() {
+      document.getElementById('manage-list').innerHTML = '<tr><td colspan="5" class="text-center text-muted">Đang tải dữ liệu...</td></tr>';
+      manageApi('/api/manage/services')
+        .then(data => {
+          if (!data.success) {
+            document.getElementById('manage-list').innerHTML = `<tr><td colspan="5" class="text-center text-danger">${escapeHtml(data.message)}</td></tr>`;
+            return;
+          }
+          manageServices = [
+            ...(data.docker || []).map(c => ({
+              type: 'docker', name: c.name, running: c.state === 'running',
+              state: c.state, detail: `${c.image} — ${c.status}`
+            })),
+            ...(data.systemd || []).map(s => ({
+              type: 'systemd', name: s.name, running: s.active === 'active',
+              state: s.active === 'active' ? s.sub : s.active, enabled: s.enabled, detail: s.description
+            }))
+          ];
+          document.getElementById('manage-docker-error').innerText = data.docker_error ? 'Docker: ' + data.docker_error : '';
+          renderManageServices();
+        })
+        .catch(() => {});
+    }
+
+    function renderManageServices() {
+      const keyword = document.getElementById('manage-search').value.trim().toLowerCase();
+      const filter = document.getElementById('manage-filter').value;
+      const items = manageServices.filter(s =>
+        (filter === 'all' || s.type === filter) &&
+        (!keyword || s.name.toLowerCase().includes(keyword) || (s.detail || '').toLowerCase().includes(keyword))
+      );
+
+      document.getElementById('manage-count').innerText = `(${items.length}/${manageServices.length})`;
+      const tbody = document.getElementById('manage-list');
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Không tìm thấy service nào</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = items.map(s => {
+        let stateClass = 'bg-secondary';
+        if (s.running) stateClass = 'bg-success';
+        else if (s.state === 'failed' || s.state === 'dead') stateClass = 'bg-danger';
+        const typeBadge = s.type === 'docker'
+          ? '<span class="badge bg-info text-dark"><i class="bi bi-box-seam me-1"></i>Docker</span>'
+          : '<span class="badge bg-primary"><i class="bi bi-gear me-1"></i>Systemd</span>';
+        const btn = (action, cls, icon, title) =>
+          `<button class="btn btn-sm btn-outline-${cls} border-0" data-type="${s.type}" data-name="${escapeHtml(s.name)}" data-action="${action}" title="${title}"><i class="bi bi-${icon}"></i></button>`;
+
+        return `
+          <tr>
+            <td class="fw-bold text-warning text-break">${escapeHtml(s.name)}</td>
+            <td>${typeBadge}</td>
+            <td>
+              <span class="badge ${stateClass}">${escapeHtml(s.state)}</span>
+              ${s.enabled ? `<div class="small text-muted">${escapeHtml(s.enabled)}</div>` : ''}
+            </td>
+            <td class="small text-muted text-truncate" style="max-width: 300px;" title="${escapeHtml(s.detail)}">${escapeHtml(s.detail)}</td>
+            <td class="manage-actions text-nowrap">
+              ${s.running ? '' : btn('start', 'success', 'play-fill', 'Start')}
+              ${s.running ? btn('stop', 'danger', 'stop-fill', 'Stop') : ''}
+              ${btn('restart', 'warning', 'arrow-clockwise', 'Restart')}
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    function serviceAction(type, name, action, button) {
+      if ((action === 'stop' || action === 'restart') && !confirm(`Bạn có chắc chắn muốn ${action.toUpperCase()} "${name}" không?`)) return;
+      const row = button.closest('tr');
+      row.querySelectorAll('button').forEach(b => b.disabled = true);
+      button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      manageApi('/api/manage/service', { type: type, name: name, action: action })
+        .then(res => {
+          if (!res.success) alert('Lỗi: ' + res.message);
+          fetchManageServices();
+        })
+        .catch(() => {});
+    }
+
+    document.getElementById('manage-list').addEventListener('click', e => {
+      const button = e.target.closest('button[data-action]');
+      if (button) serviceAction(button.dataset.type, button.dataset.name, button.dataset.action, button);
+    });
+
+    window.onload = function() {
+      initChart();
+      switchTab('hardware');
+      setInterval(() => {
+        if (document.getElementById('tab-hardware').style.display !== 'none') fetchHardware();
+        if (document.getElementById('tab-torrent').style.display !== 'none') fetchTorrents();
+	if (document.getElementById('tab-services').style.display !== 'none') fetchServices();
+      }, 10000);
+    };
+  </script>
+</body>
+</html>
